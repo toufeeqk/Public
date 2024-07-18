@@ -1,0 +1,4 @@
+"NicName","ResourceGroup","PrivateIP","PublicIP","LinkedVM","LinkedResource"
+"prduw-hub-kv-pe.nic.f81a1fee-5aae-4712-8c7b-133241dfb8ac","prduw-hubnetwork-rg","172.20.2.4","None","","prduw-hub-kv-pe"
+"prduw-jumpbox-02358","prduw-jumpbox-rg","172.20.1.5","None","prduw-jumpbox02",""
+"prduw-jumpbox-09358","prduw-jumpbox-rg","172.20.1.4","None","prduw-jumpbox01",""
