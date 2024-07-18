@@ -1,13 +1,16 @@
 # Get all network interfaces and their details
-$nics = az network nic list --query '[].{Name:name, ResourceGroup:resourceGroup, IpConfigurations:ipConfigurations, VMId:virtualMachine.id, LinkedResource:privateEndpoint.id}' -o json | ConvertFrom-Json
+$nics = az network nic list --query '[].{Name:name, ResourceGroup:resourceGroup, IpConfigurations:ipConfigurations, VMId:virtualMachine.id, PrivateEndpoint:privateEndpoint.id}' -o json | ConvertFrom-Json
 
 # Get all public IP addresses
 $publicIps = az network public-ip list --query '[].{Id:id, PublicIP:ipAddress}' -o json | ConvertFrom-Json
 
+# Get all private endpoints and their linked resources
+$privateEndpoints = az network private-endpoint list --query '[].{Name:name, ResourceGroup:resourceGroup, LinkedResource:privateLinkServiceConnections[0].privateLinkServiceId}' -o json | ConvertFrom-Json
+
 # Initialize an array to hold the combined results
 $combinedResults = @()
 
-# Combine NIC details with public IP addresses
+# Combine NIC details with public IP addresses and private endpoints
 foreach ($nic in $nics) {
     # Extract the private IP from the first ipConfiguration
     $privateIp = $nic.IpConfigurations[0].privateIPAddress
@@ -20,17 +23,24 @@ foreach ($nic in $nics) {
     }
 
     # Extract the resource name from the LinkedResource
-    $VMId               = ($nic.VMId -split '/')[-1]
-    $linkedResourceName = ($nic.LinkedResource -split '/')[-1]
+    $VMId = ($nic.VMId -split '/')[-1]
+    $PrivateEndpointName = ($nic.PrivateEndpoint -split '/')[-1]
+
+    # Get the linked resource for the private endpoint
+    $linkedResource = $privateEndpoints | Where-Object { $_.Name -eq $PrivateEndpointName } | Select-Object -ExpandProperty LinkedResource -ErrorAction SilentlyContinue
+    if (-not $linkedResource) {
+        $linkedResource = "None"
+    }
 
     # Create a custom object with the combined details
     $combinedResult = [PSCustomObject]@{
-        NicName         = $nic.Name
-        ResourceGroup   = $nic.ResourceGroup
-        PrivateIP       = $privateIp
-        PublicIP        = $publicIp
-        LinkedVM        = $VMId
-        LinkedResource  = $linkedResourceName
+        NicName          = $nic.Name
+        ResourceGroup    = $nic.ResourceGroup
+        PrivateIP        = $privateIp
+        PublicIP         = $publicIp
+        LinkedVM         = $VMId
+        PrivateEndpoint  = $PrivateEndpointName
+        LinkedResource   = ($linkedResource -split '/')[-1]
     }
 
     # Add the custom object to the results array
