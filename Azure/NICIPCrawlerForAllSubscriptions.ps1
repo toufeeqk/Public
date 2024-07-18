@@ -18,6 +18,9 @@ foreach ($subscription in $subscriptions) {
     # Get all private endpoints and their linked resources
     $privateEndpoints = az network private-endpoint list --query '[].{Name:name, ResourceGroup:resourceGroup, LinkedResource:privateLinkServiceConnections[0].privateLinkServiceId}' -o json | ConvertFrom-Json
 
+    # Get all resources in the subscription
+    $allResources = az resource list --query '[].{Id:id, Type:type}' -o json | ConvertFrom-Json
+
     # Combine NIC details with public IP addresses and private endpoints
     foreach ($nic in $nics) {
         # Extract the private IP from the first ipConfiguration
@@ -40,16 +43,35 @@ foreach ($subscription in $subscriptions) {
             $linkedResource = "None"
         }
 
+        # Cross reference the linked resource or VM with all resources to get the resource type
+        $linkedResourceType = "None"
+        if ($linkedResource -ne "None") {
+            $resourceType = $allResources | Where-Object { $_.Id -eq $linkedResource } | Select-Object -ExpandProperty Type -ErrorAction SilentlyContinue
+            if (-not $resourceType) {
+                $linkedResourceType = "Unknown"
+            } else {
+                $linkedResourceType = $resourceType
+            }
+        } elseif ($VMId -ne "None") {
+            $resourceType = $allResources | Where-Object { $_.Id -eq $nic.VMId } | Select-Object -ExpandProperty Type -ErrorAction SilentlyContinue
+            if (-not $resourceType) {
+                $linkedResourceType = "Unknown"
+            } else {
+                $linkedResourceType = $resourceType
+            }
+        }
+
         # Create a custom object with the combined details
         $combinedResult = [PSCustomObject]@{
-            Subscription    = $subscription.Name
-            NicName         = $nic.Name
-            ResourceGroup   = $nic.ResourceGroup
-            PrivateIP       = $privateIp
-            PublicIP        = $publicIp
-            LinkedVM        = $VMId
-            PrivateEndpoint = $PrivateEndpointName
-            LinkedResource  = ($linkedResource -split '/')[-1]
+            Subscription       = $subscription.Name
+            NicName            = $nic.Name
+            ResourceGroup      = $nic.ResourceGroup
+            PrivateIP          = $privateIp
+            PublicIP           = $publicIp
+            LinkedVM           = $VMId
+            PrivateEndpoint    = $PrivateEndpointName
+            LinkedResource     = ($linkedResource -split '/')[-1]
+            LinkedResourceType = $linkedResourceType
         }
 
         # Add the custom object to the results array
@@ -60,7 +82,7 @@ foreach ($subscription in $subscriptions) {
 }
 
 # Export the combined results to a CSV file
-$combinedResults | Export-Csv -Path "network_interfaces.csv" -NoTypeInformation
+$combinedResults | Export-Csv -Path "network_interfaces_for_all_subscriptions.csv" -NoTypeInformation
 
 # Display a message indicating that the export is complete
 Write-Output "The network interface details have been exported to network_interfaces.csv"

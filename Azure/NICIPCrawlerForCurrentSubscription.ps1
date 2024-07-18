@@ -7,6 +7,9 @@ $publicIps = az network public-ip list --query '[].{Id:id, PublicIP:ipAddress}' 
 # Get all private endpoints and their linked resources
 $privateEndpoints = az network private-endpoint list --query '[].{Name:name, ResourceGroup:resourceGroup, LinkedResource:privateLinkServiceConnections[0].privateLinkServiceId}' -o json | ConvertFrom-Json
 
+# Get all resources in the subscription
+$allResources = az resource list --query '[].{Id:id, Type:type}' -o json | ConvertFrom-Json
+
 # Initialize an array to hold the combined results
 $combinedResults = @()
 
@@ -32,6 +35,25 @@ foreach ($nic in $nics) {
         $linkedResource = "None"
     }
 
+    # Cross reference the linked resource or VM with all resources to get the resource type
+    $linkedResourceType = "None"
+    if ($linkedResource -ne "None") {
+        $resourceType = $allResources | Where-Object { $_.Id -eq $linkedResource } | Select-Object -ExpandProperty Type -ErrorAction SilentlyContinue
+        if (-not $resourceType) {
+            $linkedResourceType = "Unknown"
+        } else {
+            $linkedResourceType = $resourceType
+        }
+    } elseif ($VMId -ne "None") {
+        $resourceType = $allResources | Where-Object { $_.Id -eq $nic.VMId } | Select-Object -ExpandProperty Type -ErrorAction SilentlyContinue
+        if (-not $resourceType) {
+            $linkedResourceType = "Unknown"
+        } else {
+            $linkedResourceType = $resourceType
+        }
+    }
+
+    
     # Create a custom object with the combined details
     $combinedResult = [PSCustomObject]@{
         NicName          = $nic.Name
@@ -41,6 +63,7 @@ foreach ($nic in $nics) {
         LinkedVM         = $VMId
         PrivateEndpoint  = $PrivateEndpointName
         LinkedResource   = ($linkedResource -split '/')[-1]
+        LinkedResourceType = $linkedResourceType
     }
 
     # Add the custom object to the results array
